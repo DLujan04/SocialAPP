@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -12,14 +12,59 @@ const Tab = createBottomTabNavigator();
 
 const API_URL = 'https://social-network-v7j7.onrender.com/api';
 
+// LoadingOverlay Component
+const LoadingOverlay = () => (
+  <View style={styles.overlay}>
+    <ActivityIndicator size="large" color="#007AFF" />
+  </View>
+);
+
+// API Status Check Functions
+const checkApiStatus = async () => {
+  try {
+    const response = await axios.get('https://social-network-v7j7.onrender.com/status');
+    return response.data.status === 'Server is running';
+  } catch (error) {
+    console.error('Error checking API status:', error);
+    return false;
+  }
+};
+
+const ensureApiIsAwake = async (setIsLoading) => {
+  setIsLoading(true);
+  let isAwake = await checkApiStatus();
+  let attempts = 0;
+  const maxAttempts = 3;
+
+  while (!isAwake && attempts < maxAttempts) {
+    await new Promise(resolve => setTimeout(resolve, 20000)); // Wait for 20 seconds
+    isAwake = await checkApiStatus();
+    attempts++;
+  }
+
+  setIsLoading(false);
+  return isAwake;
+};
+
 // SignUp Screen
 const SignUpScreen = ({ navigation }) => {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSignUp = async () => {
+    setIsLoading(true);
+    setError('');
+
+    const isApiAwake = await ensureApiIsAwake(setIsLoading);
+    if (!isApiAwake) {
+      setError('Unable to connect to the server. Please try again later.');
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const response = await axios.post(`${API_URL}/auth/signup`, {
         username,
@@ -34,6 +79,8 @@ const SignUpScreen = ({ navigation }) => {
       }
     } catch (error) {
       setError(error.response ? error.response.data.message : error.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -61,13 +108,14 @@ const SignUpScreen = ({ navigation }) => {
         onChangeText={setPassword}
         secureTextEntry
       />
-      <TouchableOpacity style={[styles.button, styles.greenButton]} onPress={handleSignUp}>
-        <Text style={styles.buttonText}>Sign Up</Text>
+      <TouchableOpacity style={[styles.button, styles.greenButton]} onPress={handleSignUp} disabled={isLoading}>
+        <Text style={styles.buttonText}>{isLoading ? 'Signing up...' : 'Sign Up'}</Text>
       </TouchableOpacity>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
       <TouchableOpacity onPress={() => navigation.navigate('Login')}>
         <Text style={styles.linkText}>Already have an account? Login</Text>
       </TouchableOpacity>
+      {isLoading && <LoadingOverlay />}
     </View>
   );
 };
@@ -77,8 +125,19 @@ const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async () => {
+    setIsLoading(true);
+    setError('');
+
+    const isApiAwake = await ensureApiIsAwake(setIsLoading);
+    if (!isApiAwake) {
+      setError('Unable to connect to the server. Please try again later.');
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const response = await axios.post(`${API_URL}/auth/login`, {
         email,
@@ -92,6 +151,8 @@ const LoginScreen = ({ navigation }) => {
       }
     } catch (error) {
       setError(error.response ? error.response.data.message : error.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -113,13 +174,14 @@ const LoginScreen = ({ navigation }) => {
         onChangeText={setPassword}
         secureTextEntry
       />
-      <TouchableOpacity style={styles.button} onPress={handleLogin}>
-        <Text style={styles.buttonText}>Login</Text>
+      <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={isLoading}>
+        <Text style={styles.buttonText}>{isLoading ? 'Logging in...' : 'Login'}</Text>
       </TouchableOpacity>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
       <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
         <Text style={styles.linkText}>Don't have an account? Sign Up</Text>
       </TouchableOpacity>
+      {isLoading && <LoadingOverlay />}
     </View>
   );
 };
@@ -127,12 +189,14 @@ const LoginScreen = ({ navigation }) => {
 // All Posts Screen
 const AllPostsScreen = () => {
   const [posts, setPosts] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     fetchPosts();
   }, []);
 
   const fetchPosts = async () => {
+    setIsLoading(true);
     try {
       const token = await AsyncStorage.getItem('token');
       const response = await axios.get(`${API_URL}/posts?page=1&limit=10`, {
@@ -141,6 +205,8 @@ const AllPostsScreen = () => {
       setPosts(response.data);
     } catch (error) {
       console.error('Fetch posts error:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -164,11 +230,17 @@ const AllPostsScreen = () => {
 
   return (
     <View style={styles.container}>
-      <FlatList
-        data={posts}
-        renderItem={renderPost}
-        keyExtractor={(item) => item.id.toString()}
-      />
+      {isLoading ? (
+        <LoadingOverlay />
+      ) : (
+        <FlatList
+          data={posts}
+          renderItem={renderPost}
+          keyExtractor={(item) => item.id.toString()}
+          refreshing={isLoading}
+          onRefresh={fetchPosts}
+        />
+      )}
       <TouchableOpacity style={styles.floatingButton} onPress={() => console.log('New post')}>
         <Ionicons name="add" size={24} color="#fff" />
       </TouchableOpacity>
@@ -179,12 +251,14 @@ const AllPostsScreen = () => {
 // Following Screen
 const FollowingScreen = () => {
   const [feed, setFeed] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     fetchFeed();
   }, []);
 
   const fetchFeed = async () => {
+    setIsLoading(true);
     try {
       const token = await AsyncStorage.getItem('token');
       const response = await axios.get(`${API_URL}/feed?page=1&limit=10`, {
@@ -193,6 +267,8 @@ const FollowingScreen = () => {
       setFeed(response.data);
     } catch (error) {
       console.error('Fetch feed error:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -216,11 +292,17 @@ const FollowingScreen = () => {
 
   return (
     <View style={styles.container}>
-      <FlatList
-        data={feed}
-        renderItem={renderFeedItem}
-        keyExtractor={(item) => item.id.toString()}
-      />
+      {isLoading ? (
+        <LoadingOverlay />
+      ) : (
+        <FlatList
+          data={feed}
+          renderItem={renderFeedItem}
+          keyExtractor={(item) => item.id.toString()}
+          refreshing={isLoading}
+          onRefresh={fetchFeed}
+        />
+      )}
     </View>
   );
 };
