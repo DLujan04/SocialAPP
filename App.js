@@ -37,7 +37,7 @@ const ensureApiIsAwake = async (setIsLoading) => {
   const maxAttempts = 3;
 
   while (!isAwake && attempts < maxAttempts) {
-    await new Promise(resolve => setTimeout(resolve, 20000)); // Wait for 20 seconds
+    await new Promise(resolve => setTimeout(resolve, 20000)); 
     isAwake = await checkApiStatus();
     attempts++;
   }
@@ -187,7 +187,7 @@ const LoginScreen = ({ navigation }) => {
 };
 
 // All Posts Screen
-const AllPostsScreen = () => {
+const AllPostsScreen = ({ navigation }) => {
   const [posts, setPosts] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -210,18 +210,34 @@ const AllPostsScreen = () => {
     }
   };
 
+  const handleLike = async (postId) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const response = await axios.put(`${API_URL}/posts/${postId}/like`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.data.message === "Post liked." || response.data.message === "Post unliked.") {
+        fetchPosts(); // Refresh posts after liking/unliking
+      }
+    } catch (error) {
+      console.error('Error liking/unliking post:', error);
+    }
+  };
+
   const renderPost = ({ item }) => (
     <View style={styles.postContainer}>
-      <View style={styles.postHeader}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{item.username[0].toUpperCase()}</Text>
+      <TouchableOpacity onPress={() => navigation.navigate('UserProfile', { userId: item.user_id, username: item.username })}>
+        <View style={styles.postHeader}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{item.username[0].toUpperCase()}</Text>
+          </View>
+          <Text style={styles.postUsername}>{item.username}</Text>
         </View>
-        <Text style={styles.postUsername}>{item.username}</Text>
-      </View>
+      </TouchableOpacity>
       <Text style={styles.postContent}>{item.content}</Text>
       <View style={styles.postFooter}>
-        <TouchableOpacity style={styles.likeButton}>
-          <Ionicons name="heart-outline" size={24} color="#007AFF" />
+        <TouchableOpacity style={styles.likeButton} onPress={() => handleLike(item.id)}>
+          <Ionicons name={item.likes.includes('currentUserId') ? "heart" : "heart-outline"} size={24} color="#007AFF" />
           <Text style={styles.likeCount}>{item.likes.length}</Text>
         </TouchableOpacity>
       </View>
@@ -241,15 +257,12 @@ const AllPostsScreen = () => {
           onRefresh={fetchPosts}
         />
       )}
-      <TouchableOpacity style={styles.floatingButton} onPress={() => console.log('New post')}>
-        <Ionicons name="add" size={24} color="#fff" />
-      </TouchableOpacity>
     </View>
   );
 };
 
 // Following Screen
-const FollowingScreen = () => {
+const FollowingScreen = ({ navigation }) => {
   const [feed, setFeed] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -272,18 +285,34 @@ const FollowingScreen = () => {
     }
   };
 
+  const handleLike = async (postId) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const response = await axios.put(`${API_URL}/posts/${postId}/like`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.data.message === "Post liked." || response.data.message === "Post unliked.") {
+        fetchFeed(); // Refresh feed after liking/unliking
+      }
+    } catch (error) {
+      console.error('Error liking/unliking post:', error);
+    }
+  };
+
   const renderFeedItem = ({ item }) => (
     <View style={styles.postContainer}>
-      <View style={styles.postHeader}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{item.username[0].toUpperCase()}</Text>
+      <TouchableOpacity onPress={() => navigation.navigate('UserProfile', { userId: item.user_id, username: item.username })}>
+        <View style={styles.postHeader}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{item.username[0].toUpperCase()}</Text>
+          </View>
+          <Text style={styles.postUsername}>{item.username}</Text>
         </View>
-        <Text style={styles.postUsername}>{item.username}</Text>
-      </View>
+      </TouchableOpacity>
       <Text style={styles.postContent}>{item.content}</Text>
       <View style={styles.postFooter}>
-        <TouchableOpacity style={styles.likeButton}>
-          <Ionicons name="heart-outline" size={24} color="#007AFF" />
+        <TouchableOpacity style={styles.likeButton} onPress={() => handleLike(item.id)}>
+          <Ionicons name={item.likes.includes('currentUserId') ? "heart" : "heart-outline"} size={24} color="#007AFF" />
           <Text style={styles.likeCount}>{item.likes.length}</Text>
         </TouchableOpacity>
       </View>
@@ -313,6 +342,119 @@ const ProfileScreen = () => {
     <View style={styles.container}>
       <Text style={styles.title}>Profile</Text>
       {/* Add profile content here */}
+    </View>
+  );
+};
+
+// User Profile Screen
+const UserProfileScreen = ({ route, navigation }) => {
+  const { userId, username } = route.params;
+  const [userInfo, setUserInfo] = useState(null);
+  const [userPosts, setUserPosts] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    fetchUserInfo();
+    fetchUserPosts();
+  }, []);
+
+  const fetchUserInfo = async () => {
+    setIsLoading(true);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const response = await axios.get(`${API_URL}/users/${userId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setUserInfo(response.data);
+    } catch (error) {
+      console.error('Error fetching user info:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchUserPosts = async () => {
+    setIsLoading(true);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const response = await axios.get(`${API_URL}/users/${userId}/posts?page=1&limit=10`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setUserPosts(response.data);
+    } catch (error) {
+      console.error('Error fetching user posts:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFollow = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const method = userInfo.is_following ? 'delete' : 'put';
+      const response = await axios[method](`${API_URL}/users/${userId}/follow`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.data.message.includes('followed') || response.data.message.includes('unfollowed')) {
+        setUserInfo(prevInfo => ({ ...prevInfo, is_following: !prevInfo.is_following }));
+      }
+    } catch (error) {
+      console.error('Error following/unfollowing user:', error);
+    }
+  };
+
+  const handleLike = async (postId) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const response = await axios.put(`${API_URL}/posts/${postId}/like`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.data.message === "Post liked." || response.data.message === "Post unliked.") {
+        fetchUserPosts(); // Refresh posts after liking/unliking
+      }
+    } catch (error) {
+      console.error('Error liking/unliking post:', error);
+    }
+  };
+
+  if (isLoading) {
+    return <LoadingOverlay />;
+  }
+
+  return (
+    <View style={styles.container}>
+      {userInfo && (
+        <View style={styles.profileHeader}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{username[0].toUpperCase()}</Text>
+          </View>
+          <Text style={styles.username}>{username}</Text>
+          <View style={styles.followInfo}>
+            <Text>Followers: {userInfo.follower_count}</Text>
+            <Text>Following: {userInfo.following_count}</Text>
+          </View>
+          <TouchableOpacity style={styles.followButton} onPress={handleFollow}>
+            <Text style={styles.followButtonText}>
+              {userInfo.is_following ? 'Unfollow' : 'Follow'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      <FlatList
+        data={userPosts}
+        renderItem={({ item }) => (
+          <View style={styles.postContainer}>
+            <Text style={styles.postContent}>{item.content}</Text>
+            <View style={styles.postFooter}>
+              <TouchableOpacity style={styles.likeButton} onPress={() => handleLike(item.id)}>
+                <Ionicons name={item.likes.includes('currentUserId') ? "heart" : "heart-outline"} size={24} color="#007AFF" />
+                <Text style={styles.likeCount}>{item.likes.length}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+        keyExtractor={(item) => item.id.toString()}
+      />
     </View>
   );
 };
@@ -350,6 +492,15 @@ const App = () => {
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: true }} />
         <Stack.Screen name="SignUp" component={SignUpScreen} options={{ headerShown: true }} />
         <Stack.Screen name="MainTabs" component={MainTabNavigator} options={{ headerShown: false }} />
+        <Stack.Screen
+          name="UserProfile"
+          component={UserProfileScreen}
+          options={({ route }) => ({
+            title: route.params.username,
+            headerShown: true,
+            headerBackTitleVisible: false,
+          })}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );
@@ -449,7 +600,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   greenButton: {
-    backgroundColor: '#4CAF50', // Green color for sign up button
+    backgroundColor: '#4CAF50', 
   },
   floatingButton: {
     position: 'absolute',
@@ -466,6 +617,34 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
+  },
+  profileHeader: {
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ccc',
+  },
+  username: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 10,
+  },
+  followInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    marginTop: 10,
+  },
+  followButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginTop: 10,
+  },
+  followButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
   },
 });
 
