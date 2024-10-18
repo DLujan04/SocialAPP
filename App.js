@@ -262,7 +262,7 @@ const AllPostsScreen = ({ navigation }) => {
 };
 
 // Following Screen
-const FollowingScreen = ({ navigation }) => {
+const FollowingScreen = ({ route, navigation }) => {
   const [feed, setFeed] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -270,11 +270,14 @@ const FollowingScreen = ({ navigation }) => {
     fetchFeed();
 
     const unsubscribe = navigation.addListener('focus', () => {
-      fetchFeed();
+      if (route.params?.refreshFeed) {
+        fetchFeed();
+        navigation.setParams({ refreshFeed: false });
+      }
     });
 
     return unsubscribe;
-  }, [navigation]);
+  }, [navigation, route.params?.refreshFeed]);
 
   const fetchFeed = async () => {
     setIsLoading(true);
@@ -286,6 +289,7 @@ const FollowingScreen = ({ navigation }) => {
       setFeed(response.data);
     } catch (error) {
       console.error('Fetch feed error:', error);
+      Alert.alert('Error', 'Failed to fetch feed');
     } finally {
       setIsLoading(false);
     }
@@ -298,7 +302,6 @@ const FollowingScreen = ({ navigation }) => {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.data.message === "Post liked." || response.data.message === "Post unliked.") {
-        // Update the specific post in the feed instead of refetching all posts
         setFeed(currentFeed => currentFeed.map(post =>
           post.id === postId
             ? {
@@ -451,6 +454,7 @@ const UserProfileScreen = ({ route, navigation }) => {
       setUserInfo(response.data);
     } catch (error) {
       console.error('Error fetching user info:', error);
+      Alert.alert('Error', 'Failed to fetch user information');
     } finally {
       setIsLoading(false);
     }
@@ -466,23 +470,43 @@ const UserProfileScreen = ({ route, navigation }) => {
       setUserPosts(response.data);
     } catch (error) {
       console.error('Error fetching user posts:', error);
+      Alert.alert('Error', 'Failed to fetch user posts');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleFollow = async () => {
+  const handleFollowUnfollow = async () => {
     try {
       const token = await AsyncStorage.getItem('token');
       const method = userInfo.is_following ? 'delete' : 'put';
-      const response = await axios[method](`${API_URL}/users/${userId}/follow`, {}, {
+      const response = await axios({
+        method: method,
+        url: `${API_URL}/users/${userId}/follow`,
         headers: { Authorization: `Bearer ${token}` },
       });
+
       if (response.data.message.includes('followed') || response.data.message.includes('unfollowed')) {
-        setUserInfo(prevInfo => ({ ...prevInfo, is_following: !prevInfo.is_following }));
+        setUserInfo(prevInfo => ({
+          ...prevInfo,
+          is_following: !prevInfo.is_following,
+          follower_count: prevInfo.is_following
+            ? String(parseInt(prevInfo.follower_count) - 1)
+            : String(parseInt(prevInfo.follower_count) + 1)
+        }));
+
+        if (method === 'delete') {
+          navigation.navigate('MainTabs', {
+            screen: 'Following',
+            params: { refreshFeed: true },
+          });
+        }
+
+        Alert.alert('Success', response.data.message);
       }
     } catch (error) {
       console.error('Error following/unfollowing user:', error);
+      Alert.alert('Error', 'Failed to follow/unfollow user');
     }
   };
 
@@ -493,10 +517,11 @@ const UserProfileScreen = ({ route, navigation }) => {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.data.message === "Post liked." || response.data.message === "Post unliked.") {
-        fetchUserPosts(); 
+        fetchUserPosts();
       }
     } catch (error) {
       console.error('Error liking/unliking post:', error);
+      Alert.alert('Error', 'Failed to like/unlike post');
     }
   };
 
@@ -516,7 +541,10 @@ const UserProfileScreen = ({ route, navigation }) => {
             <Text>Followers: {userInfo.follower_count}</Text>
             <Text>Following: {userInfo.following_count}</Text>
           </View>
-          <TouchableOpacity style={styles.followButton} onPress={handleFollow}>
+          <TouchableOpacity
+            style={[styles.followButton, userInfo.is_following ? styles.unfollowButton : null]}
+            onPress={handleFollowUnfollow}
+          >
             <Text style={styles.followButtonText}>
               {userInfo.is_following ? 'Unfollow' : 'Follow'}
             </Text>
@@ -543,7 +571,6 @@ const UserProfileScreen = ({ route, navigation }) => {
 };
 
 // Main Tab Navigator
-
 const MainTabNavigator = () => (
   <Tab.Navigator
     screenOptions={({ route }) => ({
@@ -738,6 +765,9 @@ const styles = StyleSheet.create({
   followButtonText: {
     color: '#fff',
     fontWeight: 'bold',
+  },
+  unfollowButton: {
+    backgroundColor: '#FF3B30', 
   },
 });
 
