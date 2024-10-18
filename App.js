@@ -37,7 +37,7 @@ const ensureApiIsAwake = async (setIsLoading) => {
   const maxAttempts = 3;
 
   while (!isAwake && attempts < maxAttempts) {
-    await new Promise(resolve => setTimeout(resolve, 20000)); 
+    await new Promise(resolve => setTimeout(resolve, 20000));
     isAwake = await checkApiStatus();
     attempts++;
   }
@@ -217,7 +217,7 @@ const AllPostsScreen = ({ navigation }) => {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.data.message === "Post liked." || response.data.message === "Post unliked.") {
-        fetchPosts(); // Refresh posts after liking/unliking
+        fetchPosts(); 
       }
     } catch (error) {
       console.error('Error liking/unliking post:', error);
@@ -268,7 +268,13 @@ const FollowingScreen = ({ navigation }) => {
 
   useEffect(() => {
     fetchFeed();
-  }, []);
+
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchFeed();
+    });
+
+    return unsubscribe;
+  }, [navigation]);
 
   const fetchFeed = async () => {
     setIsLoading(true);
@@ -292,7 +298,16 @@ const FollowingScreen = ({ navigation }) => {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.data.message === "Post liked." || response.data.message === "Post unliked.") {
-        fetchFeed(); // Refresh feed after liking/unliking
+        // Update the specific post in the feed instead of refetching all posts
+        setFeed(currentFeed => currentFeed.map(post =>
+          post.id === postId
+            ? {
+              ...post, likes: post.likes.includes('currentUserId')
+                ? post.likes.filter(id => id !== 'currentUserId')
+                : [...post.likes, 'currentUserId']
+            }
+            : post
+        ));
       }
     } catch (error) {
       console.error('Error liking/unliking post:', error);
@@ -338,10 +353,78 @@ const FollowingScreen = ({ navigation }) => {
 
 // Profile Screen
 const ProfileScreen = () => {
+  const [userInfo, setUserInfo] = useState(null);
+  const [userPosts, setUserPosts] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    fetchUserInfo();
+    fetchUserPosts();
+  }, []);
+
+  const fetchUserInfo = async () => {
+    setIsLoading(true);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const response = await axios.get(`${API_URL}/users/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setUserInfo(response.data);
+    } catch (error) {
+      console.error('Error fetching user info:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchUserPosts = async () => {
+    setIsLoading(true);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const response = await axios.get(`${API_URL}/users/me/posts?page=1&limit=10`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setUserPosts(response.data);
+    } catch (error) {
+      console.error('Error fetching user posts:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading) {
+    return <LoadingOverlay />;
+  }
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Profile</Text>
-      {/* Add profile content here */}
+      {userInfo && (
+        <View style={styles.profileHeader}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{userInfo.username[0].toUpperCase()}</Text>
+          </View>
+          <Text style={styles.username}>{userInfo.username}</Text>
+          <View style={styles.followInfo}>
+            <Text>Followers: {userInfo.follower_count}</Text>
+            <Text>Following: {userInfo.following_count}</Text>
+          </View>
+        </View>
+      )}
+      <FlatList
+        data={userPosts}
+        renderItem={({ item }) => (
+          <View style={styles.postContainer}>
+            <Text style={styles.postContent}>{item.content}</Text>
+            <View style={styles.postFooter}>
+              <TouchableOpacity style={styles.likeButton} onPress={() => handleLike(item.id)}>
+                <Ionicons name={item.likes.includes('currentUserId') ? "heart" : "heart-outline"} size={24} color="#007AFF" />
+                <Text style={styles.likeCount}>{item.likes.length}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+        keyExtractor={(item) => item.id.toString()}
+      />
     </View>
   );
 };
@@ -410,7 +493,7 @@ const UserProfileScreen = ({ route, navigation }) => {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.data.message === "Post liked." || response.data.message === "Post unliked.") {
-        fetchUserPosts(); // Refresh posts after liking/unliking
+        fetchUserPosts(); 
       }
     } catch (error) {
       console.error('Error liking/unliking post:', error);
@@ -460,6 +543,7 @@ const UserProfileScreen = ({ route, navigation }) => {
 };
 
 // Main Tab Navigator
+
 const MainTabNavigator = () => (
   <Tab.Navigator
     screenOptions={({ route }) => ({
@@ -479,7 +563,16 @@ const MainTabNavigator = () => (
     })}
   >
     <Tab.Screen name="All Posts" component={AllPostsScreen} />
-    <Tab.Screen name="Following" component={FollowingScreen} />
+    <Tab.Screen
+      name="Following"
+      component={FollowingScreen}
+      listeners={({ navigation }) => ({
+        tabPress: e => {
+          e.preventDefault();
+          navigation.navigate('Following', { screen: 'Following' });
+        },
+      })}
+    />
     <Tab.Screen name="Profile" component={ProfileScreen} />
   </Tab.Navigator>
 );
@@ -600,7 +693,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   greenButton: {
-    backgroundColor: '#4CAF50', 
+    backgroundColor: '#4CAF50',
   },
   floatingButton: {
     position: 'absolute',
