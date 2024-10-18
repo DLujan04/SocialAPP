@@ -722,22 +722,6 @@ const styles = StyleSheet.create({
   greenButton: {
     backgroundColor: '#4CAF50',
   },
-  floatingButton: {
-    position: 'absolute',
-    width: 56,
-    height: 56,
-    alignItems: 'center',
-    justifyContent: 'center',
-    right: 20,
-    bottom: 20,
-    backgroundColor: '#007AFF',
-    borderRadius: 28,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
   profileHeader: {
     alignItems: 'center',
     padding: 20,
